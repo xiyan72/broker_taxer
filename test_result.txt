@@ -1,0 +1,11 @@
+﻿SUCCESS: 6 rows -> sheet=鑲℃伅鍏ヨ处姹囨€?-> file=brokerQ2_鑲℃伅鍏ヨ处姹囨€?xlsx
+馃搨 姝ｅ湪璇诲彇鏂囦欢: brokerQ2.xls
+鈿狅笍  xlrd 璇诲彇澶辫触: Unsupported format, or corrupt file: Expected BOF record; found b'\xb1\xd2\xd6\xd6\t\xd6\xa4\xc8'
+馃攧 灏濊瘯浠ユ枃鏈紙TSV锛夋牸寮忚В鏋愨€?
+鉁?鎴愬姛浠?TSV/gb18030 妯″紡璇诲彇锛堝叡 185 琛岋紝21 鍒楋級
+鉁?鎴愬姛浠?HTML 妯″紡璇诲彇锛堝浗鍐呭埜鍟嗘牸寮忥級
+馃搵 鍏卞彂鐜?1 涓伐浣滆〃: Sheet1
+鉁?鍦ㄥ伐浣滆〃 銆孲heet1銆?鎵惧埌 6 鏉°€岃偂鎭叆璐︺€嶈褰?
+馃攳 鍏辩瓫閫夊嚭 6 鏉¤褰曪紝鍑嗗鍐欏叆鏂板伐浣滆〃鈥?
+鈩癸笍  灏嗗彟瀛樹负鏂版枃浠? brokerQ2_鑲℃伅鍏ヨ处姹囨€?xlsx
+馃捑 宸蹭繚瀛樺伐浣滆〃銆岃偂鎭叆璐︽眹鎬汇€嶁啋 brokerQ2_鑲℃伅鍏ヨ处姹囨€?xlsx
