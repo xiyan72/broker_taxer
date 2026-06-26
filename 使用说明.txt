@@ -1,0 +1,6 @@
+file purpose:
+	python-file(dividend_filter) can get all dividend info from broker exported "资金流水" excel file which can be selected by ui button.
+	python-file(update_latest_buy) can update stock_name_code_exchange_inventory.xls's latest-buy column from lastest_buy_date.xls.
+daily_usage:
+	goto broker app,export excel file 资金流水
+	run dividend_filter ,select 资金流水,generate 股息入账汇总

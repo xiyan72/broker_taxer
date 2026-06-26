@@ -149,6 +149,59 @@ def _read_all_sheets(filepath: str, log_fn) -> tuple:
     )
 
 
+def _load_inventory_map(log_fn):
+    inv_map = {}
+    possible_names = ["stock_name_code_exchange_inventory.xlsx", "stock_name_code_exchange_inventory.xls"]
+    inv_path = None
+    for name in possible_names:
+        p = Path(__file__).parent / name
+        if p.exists():
+            inv_path = p
+            break
+            
+    if not inv_path:
+        log_fn("⚠️  未找到 stock_name_code_exchange_inventory.xlsx/xls 文件，将跳过备注更新。")
+        return inv_map
+        
+    try:
+        log_fn(f"📖 正在读取库存文件: {inv_path.name}")
+        engine = "openpyxl" if inv_path.suffix.lower() == ".xlsx" else "xlrd"
+        df_inv = pd.read_excel(str(inv_path), engine=engine)
+        
+        def clean_code(val):
+            if pd.isna(val):
+                return None
+            val_str = str(val).strip()
+            if val_str.startswith('="') and val_str.endswith('"'):
+                val_str = val_str[2:-1]
+            val_str = re.sub(r'^0+', '', val_str)
+            if not val_str:
+                return '0'
+            return val_str
+
+        for _, row in df_inv.iterrows():
+            if '证券代码' not in row or '证券名称' not in row:
+                continue
+            code = clean_code(row['证券代码'])
+            name = str(row['证券名称']).strip()
+            latest_buy = row.get('latest_buy', '')
+            if pd.isna(latest_buy):
+                latest_buy = ''
+            else:
+                latest_buy = str(latest_buy).strip()
+                
+            if code:
+                if code not in inv_map:
+                    inv_map[code] = []
+                inv_map[code].append((name, latest_buy))
+                
+        log_fn(f"✅ 成功加载库存映射，共 {len(inv_map)} 个证券代码。")
+    except Exception as e:
+        log_fn(f"⚠️  读取库存文件失败: {e}")
+        
+    return inv_map
+
+
 def process_excel(filepath: str, progress_cb=None, log_cb=None):
     """
     Reads the Excel file, filters rows, writes a new sheet.
@@ -207,7 +260,7 @@ def process_excel(filepath: str, progress_cb=None, log_cb=None):
     if matched_df is None or len(matched_df) == 0:
         raise ValueError(
             f"未找到任何「{TARGET_COL}」列值为「{TARGET_VAL}」的行。\n"
-            "请确认列名和数值是否正确。"
+            "请确认列名 and 数值是否正确。"
         )
 
     total_rows = len(matched_df)
@@ -236,6 +289,25 @@ def process_excel(filepath: str, progress_cb=None, log_cb=None):
 
     columns = list(matched_df.columns)
 
+    # ── Load inventory map ───────────────────────────────────────
+    inv_map = _load_inventory_map(log)
+
+    code_idx = None
+    name_idx = None
+    memo_idx = None
+    for ci, col_name in enumerate(columns):
+        if col_name == '证券代码':
+            code_idx = ci
+        elif col_name == '证券名称':
+            name_idx = ci
+        elif col_name == '备注':
+            memo_idx = ci
+
+    # If '备注' is not in columns, add it to columns list
+    if memo_idx is None:
+        columns.append('备注')
+        memo_idx = len(columns) - 1
+
     # Header row
     for ci, col_name in enumerate(columns, start=1):
         cell = ws.cell(row=1, column=ci, value=col_name)
@@ -245,15 +317,62 @@ def process_excel(filepath: str, progress_cb=None, log_cb=None):
     prog(70)
 
     # Data rows
+    # Pre-build list of rows to write
+    rows_to_write = []
+    
+    def clean_code(val):
+        if pd.isna(val):
+            return None
+        val_str = str(val).strip()
+        if val_str.startswith('="') and val_str.endswith('"'):
+            val_str = val_str[2:-1]
+        val_str = re.sub(r'^0+', '', val_str)
+        if not val_str:
+            return '0'
+        return val_str
+
+    for _, row in matched_df.iterrows():
+        row_vals = list(row)
+        # Ensure row_vals has enough elements if we appended '备注'
+        while len(row_vals) < len(columns):
+            row_vals.append("")
+            
+        # Update '备注' column if we found match
+        if code_idx is not None and memo_idx is not None and inv_map:
+            cell_code = row_vals[code_idx]
+            cell_name = row_vals[name_idx] if name_idx is not None else ""
+            
+            if cell_code is not None and not pd.isna(cell_code):
+                cleaned_ui_code = clean_code(cell_code)
+                ui_name = str(cell_name).strip() if cell_name else ""
+                
+                if cleaned_ui_code in inv_map:
+                    candidates = inv_map[cleaned_ui_code]
+                    matched_latest_buy = None
+                    if len(candidates) == 1:
+                        matched_latest_buy = candidates[0][1]
+                    else:
+                        for name, lb in candidates:
+                            if ui_name in name or name in ui_name:
+                                matched_latest_buy = lb
+                                break
+                        if matched_latest_buy is None:
+                            matched_latest_buy = candidates[0][1]
+                            
+                    if matched_latest_buy:
+                        row_vals[memo_idx] = matched_latest_buy
+                        
+        rows_to_write.append(row_vals)
+
     numeric_flags = {
         ci: is_numeric_series(matched_df.iloc[:, ci - 1])
-        for ci in range(1, len(columns) + 1)
+        for ci in range(1, len(matched_df.columns) + 1)
     }
 
-    for ri, (_, row) in enumerate(matched_df.iterrows(), start=2):
-        for ci, val in enumerate(row, start=1):
+    for ri, row_vals in enumerate(rows_to_write, start=2):
+        for ci, val in enumerate(row_vals, start=1):
             cell = ws.cell(row=ri, column=ci, value=val)
-            style_data_cell(cell, ri, is_numeric=numeric_flags[ci])
+            style_data_cell(cell, ri, is_numeric=numeric_flags.get(ci, False))
         ws.row_dimensions[ri].height = 22
         if ri % 50 == 0:
             prog(70 + int(20 * ri / total_rows))
@@ -263,9 +382,10 @@ def process_excel(filepath: str, progress_cb=None, log_cb=None):
     # Auto-width columns
     for ci, col_name in enumerate(columns, start=1):
         col_letter = get_column_letter(ci)
+        # Compute max length using rows_to_write
         max_len = max(
             len(str(col_name)),
-            matched_df.iloc[:, ci - 1].astype(str).str.len().max()
+            max(len(str(r[ci - 1])) for r in rows_to_write) if rows_to_write else 0
         )
         ws.column_dimensions[col_letter].width = min(max(max_len + 2, 8), 40)
 
